@@ -11,22 +11,24 @@ import (
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
+
+	"github.com/BrunoOfAstora/internal/db/clients"
+	"github.com/BrunoOfAstora/internal/db/generic"
 )
 
 func StartUI() {
 	myApp := app.New()
 	myWindow := myApp.NewWindow("TinsApp")
 
-	
+	dbPath := generic.DbFilePath()
+	dbInit := clients.ClientDbInit(dbPath)
+
+	var cli []string
+
+	cli, _ = clients.ClientDbGetName(dbInit)
 
 	// Pedidos simulados iniciais
-	orders := []string{
-		"Cliente João Silva - Pedido #001",
-		"Cliente Maria Santos - Pedido #002",
-		"Cliente Pedro Oliveira - Pedido #003",
-		"Cliente Ana Costa - Pedido #004",
-		"Cliente Carlos Souza - Pedido #005",
-	}
+	orders := cli
 
 	orderList := container.NewVBox()
 

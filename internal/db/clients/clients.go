@@ -61,9 +61,29 @@ func ClientDbGet(db *sql.DB, clientName string) (int, error) {
 	return c.Id, nil
 }
 
-func ClientDbGetAllClients(db *sql.DB) ([]string, error){
-	
-}	
+func ClientDbGetName(db *sql.DB) ([]string, error) {
+	rows, err := db.Query(`
+	SELECT name FROM clients;
+	`)
+	internal.FatalErrChecking(err)
+
+	defer rows.Close()
+
+	var getAllClients []string
+
+	for rows.Next() {
+		var clientsInfo Clients
+		if err := rows.Scan(&clientsInfo.Name); err != nil {
+			return getAllClients, err
+		}
+		getAllClients = append(getAllClients, clientsInfo.Name)
+
+	}
+	if err = rows.Err(); err != nil {
+		return getAllClients, err
+	}
+	return getAllClients, err
+}
 
 func ClientDbRemoveAll(db *sql.DB, clients *Clients) error {
 	_, err := db.Exec(`
