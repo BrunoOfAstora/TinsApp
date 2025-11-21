@@ -35,24 +35,22 @@ func StartUI() {
 
 	// Variáveis de estado da UI
 	var selectedOrder string
-	var selectedClientName string // NOVO: armazenar o nome do cliente selecionado
+	var selectedClientName string
 	var mainScreen *fyne.Container
 	var orderScreen *fyne.Container
 	var orderDetailScreen *fyne.Container
 
 	// CHANGE: Variáveis para manipular o conteúdo da tela de detalhes
-	detailListContainer := container.NewVBox() // Onde ficarão os produtos
+	detailListContainer := container.NewVBox()
 	totalLabel := widget.NewLabelWithStyle("Total: R$ 0,00", fyne.TextAlignTrailing, fyne.TextStyle{Bold: true})
 
 	// CHANGE: Função auxiliar para criar linhas de produtos usando dados do banco de dados
-	var populateOrderDetails func(string)            // 1. Declara primeiro
-	populateOrderDetails = func(clientName string) { // 2. Atribui depois
-		detailListContainer.Objects = nil // Limpa a lista anterior
+	var populateOrderDetails func(string)
+	populateOrderDetails = func(clientName string) {
+		detailListContainer.Objects = nil
 
-		// NOVO: Busca os pedidos reais do cliente do banco de dados
 		products, _ := orders.OrdersDbGetInfoName(dbInit, clientName)
 
-		// Se não houver produtos no banco de dados, mostra mensagem
 		if len(products) == 0 {
 			detailListContainer.Add(widget.NewLabel("Nenhum pedido encontrado para este cliente"))
 			detailListContainer.Refresh()
@@ -62,7 +60,6 @@ func StartUI() {
 
 		var total float64 = 0
 
-		// Adiciona cabeçalho da tabela
 		header := container.NewHBox(
 			widget.NewLabelWithStyle("Qtd", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
 			widget.NewLabelWithStyle("Produto", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
@@ -73,36 +70,25 @@ func StartUI() {
 		detailListContainer.Add(header)
 		detailListContainer.Add(widget.NewSeparator())
 
-		// Itera e cria as linhas com os produtos reais
 		for _, p := range products {
 			itemTotal := p.IPrice * float64(p.IQtd)
 			total += itemTotal
 
-			// NOVO: Captura o nome do item para remover depois
 			itemId := p.ItemId
 			clientId := p.ClientId
 			clientNameCaptured := p.CName
 
-			// NOVO: Botão de remover com ícone "-"
 			btnRemove := widget.NewButtonWithIcon("", theme.CancelIcon(), func() {
-				// TODO: IMPLEMENTAR NO BACKEND
-				// Chamar: clientOrders.RemoveOrderItem(dbInit, clientNameCaptured, itemName)
-				// Essa função deve deletar o item do pedido do cliente no banco de dados
-				// Após deletar, atualizar a tela chamando populateOrderDetails(clientNameCaptured)
-				fmt.Print("\nClient id: ", clientId)
-
 				err := orders.OrdersDbRemove(dbInit, clientId, itemId)
 				if err != nil {
 					fmt.Println("Erro ao remover item:", err)
 					return
 				}
 
-				// Atualiza a tela após remover
 				populateOrderDetails(clientNameCaptured)
 			})
 			btnRemove.Importance = widget.DangerImportance
 
-			// Layout da linha: Qtd | Nome ... | Preço | Botão Remover
 			row := container.NewHBox(
 				widget.NewLabel(fmt.Sprintf("%dx", p.IQtd)),
 				widget.NewLabel(p.IName),
@@ -111,10 +97,9 @@ func StartUI() {
 				btnRemove,
 			)
 			detailListContainer.Add(row)
-			detailListContainer.Add(widget.NewSeparator()) // Linha divisória
+			detailListContainer.Add(widget.NewSeparator())
 		}
 
-		// Atualiza o total lá embaixo
 		totalLabel.SetText(fmt.Sprintf("Total do Pedido: R$ %.2f", total))
 		detailListContainer.Refresh()
 	}
@@ -122,12 +107,11 @@ func StartUI() {
 	reloadOrders := func() {
 		orderList.Objects = nil
 		for _, c := range clientOrders {
-			clientName := c // NOVO: armazenar o nome do cliente
+			clientName := c
 			btn := widget.NewButton(clientName, func() {
-				selectedClientName = clientName // NOVO: salvar o cliente selecionado
+				selectedClientName = clientName
 				selectedOrder = clientName
 
-				// CHANGE: Ao clicar, populamos a lista com dados reais do cliente
 				populateOrderDetails(selectedClientName)
 
 				mainScreen.Hide()
@@ -164,60 +148,194 @@ func StartUI() {
 	mainScreen = container.NewBorder(topContainer, bottomContainer, nil, nil, leftAlignedContent)
 
 	// --- TELA NOVO PEDIDO ---
-	orderTitle := widget.NewLabelWithStyle("Novo Pedido", fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
+	/*orderTitle :=*/
+	widget.NewLabelWithStyle("Novo Pedido", fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
 	btnBack := widget.NewButtonWithIcon("", theme.NavigateBackIcon(), nil)
 	topOrderBar := canvas.NewRectangle(color.NRGBA{R: 0, G: 0, B: 0, A: 0})
 	topOrderBar.SetMinSize(fyne.NewSize(1600, 60))
 	topOrderContainer := container.NewBorder(nil, nil, btnBack, nil, topOrderBar)
-	orderScreen = container.NewBorder(topOrderContainer, nil, nil, nil, container.NewCenter(orderTitle))
 
-	// --- TELA DETALHES DO PEDIDO (MUDANÇA PRINCIPAL AQUI) ---
+	// NOVO: Conteúdo da tela de novo pedido
+	// Barra de entrada para nome do cliente
+	clientNameEntry := widget.NewEntry()
+	clientNameEntry.SetPlaceHolder("Digite o nome do cliente...")
+
+	// Dropdown de categorias
+	categoryDropdown := widget.NewSelect([]string{
+		"Hamburgueres",
+		"Smash",
+		"Refrigerantes",
+		"Acompanhamentos",
+		"Sobremesas",
+	}, func(s string) {
+		fmt.Println("Categoria selecionada:", s)
+	})
+	categoryDropdown.SetSelected("Hamburgueres") // Padrão
+
+	// Container para nome e dropdown
+	headerNewOrder := container.NewHBox(
+		widget.NewLabel("Cliente:"),
+		clientNameEntry,
+		layout.NewSpacer(),
+		widget.NewLabel("Categoria:"),
+		categoryDropdown,
+	)
+
+	// Container para exibir itens disponíveis (será preenchido dinamicamente)
+	itemsContainer := container.NewVBox()
+
+	// Função para atualizar itens conforme a categoria
+	updateItemsDisplay := func(category string) {
+		itemsContainer.Objects = nil
+
+		// DADOS DE EXEMPLO - Você deve buscar do banco de dados
+		var items map[string][]struct {
+			Name  string
+			Price float64
+		}
+
+		items = map[string][]struct {
+			Name  string
+			Price float64
+		}{
+			"Hamburgueres": {
+				{Name: "X-Burguer", Price: 25.00},
+				{Name: "X-Tudo", Price: 35.50},
+				{Name: "X-Frango", Price: 28.00},
+			},
+			"Smash": {
+				{Name: "Smash Tradicional", Price: 22.00},
+				{Name: "Smash Queijo Triplo", Price: 32.00},
+				{Name: "Smash Bacon", Price: 28.00},
+			},
+			"Refrigerantes": {
+				{Name: "Refrigerante Lata", Price: 6.00},
+				{Name: "Refrigerante 2L", Price: 10.00},
+				{Name: "Suco Natural", Price: 8.00},
+			},
+			"Porções": {
+				{Name: "Batata Frita P", Price: 12.00},
+				{Name: "Batata Frita G", Price: 18.00},
+				{Name: "Cebola Frita", Price: 15.00},
+			},
+			"Sobremesas": {
+				{Name: "Sorvete", Price: 8.00},
+				{Name: "Brownie", Price: 12.00},
+				{Name: "Pudim", Price: 10.00},
+			},
+		}
+
+		// Cabeçalho da tabela de itens
+		headerItems := container.NewHBox(
+			widget.NewLabelWithStyle("Produto", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+			layout.NewSpacer(),
+			widget.NewLabelWithStyle("Preço", fyne.TextAlignTrailing, fyne.TextStyle{Bold: true}),
+			widget.NewLabelWithStyle("Ação", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
+		)
+		itemsContainer.Add(headerItems)
+		itemsContainer.Add(widget.NewSeparator())
+
+		// Exibir itens da categoria selecionada
+		if categoryItems, exists := items[category]; exists {
+			for _, item := range categoryItems {
+				itemName := item.Name
+				itemPrice := item.Price
+				clientName := clientNameEntry.Text
+
+				// Botão para adicionar item ao pedido
+				btnAddItem := widget.NewButtonWithIcon("", theme.ContentAddIcon(), func() {
+					if clientName == "" {
+						fmt.Println("Erro: Digite o nome do cliente")
+						return
+					}
+
+					// TODO: Implementar no backend
+					// Buscar clientId pelo nome
+					// Buscar itemId pelo nome
+					// Chamar: orders.InsertNewOrder(dbInit, clientId, itemId)
+
+					fmt.Printf("Adicionando %s para cliente %s\n", itemName, clientName)
+				})
+				btnAddItem.Importance = widget.SuccessImportance
+
+				// Linha do item
+				row := container.NewHBox(
+					widget.NewLabel(itemName),
+					layout.NewSpacer(),
+					widget.NewLabel(fmt.Sprintf("R$ %.2f", itemPrice)),
+					btnAddItem,
+				)
+				itemsContainer.Add(row)
+				itemsContainer.Add(widget.NewSeparator())
+			}
+		}
+
+		itemsContainer.Refresh()
+	}
+
+	// Atualizar itens quando mudar a categoria
+	categoryDropdown.OnChanged = func(s string) {
+		updateItemsDisplay(s)
+	}
+
+	// Inicializar com a primeira categoria
+	updateItemsDisplay("Hamburgueres")
+
+	// Scroll para itens
+	itemsScroll := container.NewVScroll(itemsContainer)
+	itemsScroll.SetMinSize(fyne.NewSize(1400, 650))
+
+	// Conteúdo completo da tela de novo pedido
+	orderScreenContent := container.NewVBox(
+		headerNewOrder,
+		widget.NewSeparator(),
+		itemsScroll,
+	)
+
+	orderScreen = container.NewBorder(
+		topOrderContainer,
+		nil,
+		nil,
+		nil,
+		orderScreenContent,
+	)
+
+	// --- TELA DETALHES DO PEDIDO ---
 
 	orderDetailTitle := widget.NewLabelWithStyle("Detalhes do Pedido", fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
 	btnBackDetail := widget.NewButtonWithIcon("", theme.NavigateBackIcon(), nil)
 
-	// Barra Topo Detalhes
 	topDetailBar := canvas.NewRectangle(color.NRGBA{R: 0, G: 0, B: 0, A: 0})
 	topDetailBar.SetMinSize(fyne.NewSize(1600, 60))
 	topDetailContainer := container.NewBorder(nil, nil, btnBackDetail, nil, topDetailBar)
 
-	// Cabeçalho com o título dentro do container de conteúdo
 	headerDetail := container.NewVBox(orderDetailTitle, widget.NewSeparator())
 
-	// Scroll View para a lista de produtos
 	detailScroll := container.NewVScroll(detailListContainer)
 
-	// CHANGE: Construção da barra inferior da tela de detalhes (Total + Botão Editar)
 	btnEditOrder := widget.NewButtonWithIcon("Editar Pedido", theme.DocumentCreateIcon(), func() {
 		fmt.Println("Editar pedido clicado: ", selectedOrder)
 	})
-	btnEditOrder.Importance = widget.HighImportance // Deixa o botão azul/destacado
+	btnEditOrder.Importance = widget.HighImportance
 
-	// Container inferior: Total na esquerda (ou direita), Botão Editar na direita
 	bottomDetailInfo := container.NewHBox(
 		layout.NewSpacer(),
-		totalLabel, // Label do total
+		totalLabel,
 		layout.NewSpacer(),
 	)
 
-	// Container que segura o total e o botão de editar
 	bottomDetailContainer := container.NewVBox(
 		widget.NewSeparator(),
 		bottomDetailInfo,
 		btnEditOrder,
 	)
-	// Padding para não ficar colado na borda
 	paddedBottomDetail := container.NewPadded(bottomDetailContainer)
 
-	// Montagem da tela de detalhes usando Border Layout
-	// Top: Barra de voltar
-	// Bottom: Total e Botão Editar
-	// Center: Lista de produtos (com scroll)
 	orderDetailScreen = container.NewBorder(
-		container.NewVBox(topDetailContainer, headerDetail), // Topo
-		paddedBottomDetail, // Fundo
+		container.NewVBox(topDetailContainer, headerDetail),
+		paddedBottomDetail,
 		nil, nil,
-		detailScroll, // Centro (Conteúdo)
+		detailScroll,
 	)
 
 	// Inicializa lógica
@@ -230,8 +348,9 @@ func StartUI() {
 
 	// Eventos
 	btnAddOrder.OnTapped = func() {
-		clientOrders = append(clientOrders, "Cliente Novo")
-		reloadOrders()
+		clientNameEntry.SetText("") // Limpa o campo de nome
+		categoryDropdown.SetSelected("Hamburgueres")
+		updateItemsDisplay("Hamburgueres")
 		mainScreen.Hide()
 		orderScreen.Show()
 	}

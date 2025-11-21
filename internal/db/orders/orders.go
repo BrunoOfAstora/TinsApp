@@ -70,7 +70,6 @@ func OrdersDbRemoveAll(db *sql.DB, orders *Orders) error {
 	if err != nil {
 		return err
 	}
-
 	return nil
 }
 
@@ -97,7 +96,6 @@ func EditOrder(db *sql.DB, clientName string, itemName string) {
 	clientId, _ := clients.ClientDbGet(db, clientName)
 
 	InsertNewOrder(db, clientId, itemId)
-
 }
 
 func OrdersDbGetInfoName(db *sql.DB, cName string) ([]Orders, error) {
@@ -145,7 +143,6 @@ func OrdersDbGetInfoName(db *sql.DB, cName string) ([]Orders, error) {
 }
 
 func OrdersDbRemove(db *sql.DB, clientId int, itemId int) error {
-	// Sintaxe simples do SQLite - deleta a PRIMEIRA ocorrência
 	res, err := db.Exec(`
 		 DELETE FROM orders WHERE id = (
             SELECT id FROM orders 
@@ -169,3 +166,19 @@ func OrdersDbRemove(db *sql.DB, clientId int, itemId int) error {
 
 	return nil
 }
+
+/*func OrdersGetItemsByCategory(db *sql.DB) (map[Orders][]struct{
+	Name string
+	Tpe string
+	Price float64
+}, error) {
+
+res, _ := db.Query(`
+	SELECT
+		itemid,
+
+	FROM
+`)
+
+}
+*/
