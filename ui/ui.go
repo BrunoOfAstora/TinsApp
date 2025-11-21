@@ -14,6 +14,7 @@ import (
 
 	"github.com/BrunoOfAstora/internal/db/clients"
 	"github.com/BrunoOfAstora/internal/db/generic"
+	"github.com/BrunoOfAstora/internal/db/orders"
 )
 
 func StartUI() {
@@ -28,12 +29,13 @@ func StartUI() {
 	cli, _ = clients.ClientDbGetName(dbInit)
 
 	// Pedidos simulados iniciais
-	orders := cli
+	clientOrders := cli
 
 	orderList := container.NewVBox()
 
 	// Variáveis de estado da UI
 	var selectedOrder string
+	var selectedClientName string // NOVO: armazenar o nome do cliente selecionado
 	var mainScreen *fyne.Container
 	var orderScreen *fyne.Container
 	var orderDetailScreen *fyne.Container
@@ -42,20 +44,20 @@ func StartUI() {
 	detailListContainer := container.NewVBox() // Onde ficarão os produtos
 	totalLabel := widget.NewLabelWithStyle("Total: R$ 0,00", fyne.TextAlignTrailing, fyne.TextStyle{Bold: true})
 
-	// CHANGE: Função auxiliar para criar linhas de produtos (simulando banco de dados)
-	populateOrderDetails := func(orderName string) {
+	// CHANGE: Função auxiliar para criar linhas de produtos usando dados do banco de dados
+	var populateOrderDetails func(string)            // 1. Declara primeiro
+	populateOrderDetails = func(clientName string) { // 2. Atribui depois
 		detailListContainer.Objects = nil // Limpa a lista anterior
 
-		// Simula produtos diferentes
-		mockProducts := []struct {
-			Name  string
-			Qtd   int
-			Price float64
-		}{
-			{"X-Tudo Artesanal", 1, 35.50},
-			{"Refrigerante Lata", 2, 6.00},
-			{"Batata Frita Grande", 1, 18.00},
-			{"Adicional de Bacon", 1, 4.50},
+		// NOVO: Busca os pedidos reais do cliente do banco de dados
+		products, _ := orders.OrdersDbGetInfoName(dbInit, clientName)
+
+		// Se não houver produtos no banco de dados, mostra mensagem
+		if len(products) == 0 {
+			detailListContainer.Add(widget.NewLabel("Nenhum pedido encontrado para este cliente"))
+			detailListContainer.Refresh()
+			totalLabel.SetText("Total do Pedido: R$ 0,00")
+			return
 		}
 
 		var total float64 = 0
@@ -66,21 +68,47 @@ func StartUI() {
 			widget.NewLabelWithStyle("Produto", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
 			layout.NewSpacer(),
 			widget.NewLabelWithStyle("Valor", fyne.TextAlignTrailing, fyne.TextStyle{Bold: true}),
+			widget.NewLabelWithStyle("", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
 		)
 		detailListContainer.Add(header)
 		detailListContainer.Add(widget.NewSeparator())
 
-		// Itera e cria as linhas
-		for _, p := range mockProducts {
-			itemTotal := p.Price * float64(p.Qtd)
+		// Itera e cria as linhas com os produtos reais
+		for _, p := range products {
+			itemTotal := p.IPrice * float64(p.IQtd)
 			total += itemTotal
 
-			// Layout da linha: Qtd | Nome ... | Preço
+			// NOVO: Captura o nome do item para remover depois
+			itemId := p.ItemId
+			clientId := p.ClientId
+			clientNameCaptured := p.CName
+
+			// NOVO: Botão de remover com ícone "-"
+			btnRemove := widget.NewButtonWithIcon("", theme.CancelIcon(), func() {
+				// TODO: IMPLEMENTAR NO BACKEND
+				// Chamar: clientOrders.RemoveOrderItem(dbInit, clientNameCaptured, itemName)
+				// Essa função deve deletar o item do pedido do cliente no banco de dados
+				// Após deletar, atualizar a tela chamando populateOrderDetails(clientNameCaptured)
+				fmt.Print("\nClient id: ", clientId)
+
+				err := orders.OrdersDbRemove(dbInit, clientId, itemId)
+				if err != nil {
+					fmt.Println("Erro ao remover item:", err)
+					return
+				}
+
+				// Atualiza a tela após remover
+				populateOrderDetails(clientNameCaptured)
+			})
+			btnRemove.Importance = widget.DangerImportance
+
+			// Layout da linha: Qtd | Nome ... | Preço | Botão Remover
 			row := container.NewHBox(
-				widget.NewLabel(fmt.Sprintf("%dx", p.Qtd)),
-				widget.NewLabel(p.Name),
+				widget.NewLabel(fmt.Sprintf("%dx", p.IQtd)),
+				widget.NewLabel(p.IName),
 				layout.NewSpacer(),
 				widget.NewLabel(fmt.Sprintf("R$ %.2f", itemTotal)),
+				btnRemove,
 			)
 			detailListContainer.Add(row)
 			detailListContainer.Add(widget.NewSeparator()) // Linha divisória
@@ -93,13 +121,14 @@ func StartUI() {
 
 	reloadOrders := func() {
 		orderList.Objects = nil
-		for _, c := range orders {
-			orderName := c
-			btn := widget.NewButton(orderName, func() {
-				selectedOrder = orderName
+		for _, c := range clientOrders {
+			clientName := c // NOVO: armazenar o nome do cliente
+			btn := widget.NewButton(clientName, func() {
+				selectedClientName = clientName // NOVO: salvar o cliente selecionado
+				selectedOrder = clientName
 
-				// CHANGE: Ao clicar, populamos a lista e calculamos o total
-				populateOrderDetails(selectedOrder)
+				// CHANGE: Ao clicar, populamos a lista com dados reais do cliente
+				populateOrderDetails(selectedClientName)
 
 				mainScreen.Hide()
 				orderDetailScreen.Show()
@@ -201,7 +230,7 @@ func StartUI() {
 
 	// Eventos
 	btnAddOrder.OnTapped = func() {
-		orders = append(orders, "Cliente Novo")
+		clientOrders = append(clientOrders, "Cliente Novo")
 		reloadOrders()
 		mainScreen.Hide()
 		orderScreen.Show()

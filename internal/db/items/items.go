@@ -9,9 +9,10 @@ import (
 )
 
 type Items struct {
-	Id   int
-	Name string
-	Type string
+	Id    int
+	Name  string
+	Type  string
+	Price float64
 }
 
 func ItemsDbInit(dbfilepath string) *sql.DB {
@@ -22,7 +23,8 @@ func ItemsDbInit(dbfilepath string) *sql.DB {
 		CREATE TABLE IF NOT EXISTS items (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		name TEXT NOT NULL,
-		type TEXT NOT NULL
+		type TEXT NOT NULL,
+		price FLOAT NOT NULL
 		);
 	`)
 
@@ -33,8 +35,8 @@ func ItemsDbInit(dbfilepath string) *sql.DB {
 func ItemsDbInsert(db *sql.DB, items *Items) int {
 
 	res, err := db.Exec(`
-		INSERT INTO items (name, type) VALUES (?,?);
-	`, items.Name, items.Type)
+		INSERT INTO items (name, type, price) VALUES (?,?,?);
+	`, items.Name, items.Type, items.Price)
 
 	internal.FatalErrChecking(err)
 
@@ -58,11 +60,12 @@ func ItemsDbGet(db *sql.DB, item string) (int, error) {
 	return i.Id, nil
 }
 
-func InsertNewItem(db *sql.DB, name string, tpe string) int {
+func InsertNewItem(db *sql.DB, name string, tpe string, price float64) int {
 	items := Items{}
 
 	items.Name = name
 	items.Type = tpe
+	items.Price = price
 
 	return ItemsDbInsert(db, &items)
 }
